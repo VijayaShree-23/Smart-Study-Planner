@@ -1,73 +1,166 @@
 # Smart Study Planner
 
-A full-stack study planner for students: subjects, tasks with deadlines, scheduled study sessions, and a progress dashboard. All data lives in MySQL and is served through a JWT-secured REST API.
+A full-stack study management application for organizing subjects, tasks, scheduled study sessions, and academic progress.
 
 ## Features
-- Register / login (BCrypt, JWT), protected API and React routes, persistent sessions
-- Subjects: create, edit, delete, per-subject progress
-- Tasks: CRUD, priority, status, deadline, estimate, search, filters (All/Today/Upcoming/Overdue/Completed), sort
-- **Smart Prioritization** (rule-based, not AI): `score = priority weight (10/25/40) + deadline urgency (0–40) + workload (0–10)`; see `TaskService.score`. Tasks that are overdue or score ≥ 60 are flagged "Needs attention"
-- Study sessions: schedule, complete, delete; today / upcoming / completed views
-- Dashboard and Progress pages computed by the backend from the database
-- Per-user data isolation: every query is scoped to the authenticated user's id
 
-## Frontend highlights (v2 UI)
-- **Dashboard**: live stats, weekly study chart, Today's Focus, deadlines, subject progress, achievements
-- **Smart Plan** (`/smart-plan`): transparent rule-based ranking, score = urgency (0-40) + priority (0-25) + overdue (0-20) + subject-progress gap (0-10) + effort (0-5). Not AI/ML
-- **Focus Mode** (`/focus`): 25/50/90/custom timer, persists across navigation/refresh, saves via `POST /api/study-sessions`
-- **Analytics** (`/progress`): weekly hours, tasks/day, completion donut, session stats, streaks, achievements (dependency-free SVG/CSS charts)
-- **Schedule**: month calendar + day agenda, create/edit/complete/delete sessions
-- Header search, derived notification centre, toasts, loading/empty/error states, responsive down to 390px
+- JWT-based registration and login with BCrypt password hashing
+- Subject and task management with CRUD operations
+- Task priorities, deadlines, status, search, filters, and smart rule-based prioritization
+- Study-session scheduling and progress tracking
+- Dashboard with study statistics and subject progress
+- Focus Mode with configurable study timers
+- Smart Plan for transparent rule-based task recommendations
+- Progress and analytics views with charts, streaks, and achievements
+- Responsive React interface
+- Quartz Scheduler for persistent study-session jobs
 
-## Tech stack
-React 18, Vite, React Router, Axios · Java 17, Spring Boot 3.2, Spring Security, Spring Data JPA, JJWT · MySQL 8
+## Tech Stack
+
+**Frontend:** React 18, Vite, React Router, Axios, CSS  
+**Backend:** Java 17, Spring Boot 3.2, Spring Security, Spring Data JPA, JJWT, Quartz Scheduler  
+**Database:** MySQL 8  
+**Tools:** Maven, Git, GitHub, VS Code
 
 ## Architecture
-React → Axios → Spring Boot (JwtAuthenticationFilter → Controller → Service → Repository → Entity) → MySQL
 
-## Database schema
-`users` 1─* `subjects` 1─* `tasks` 1─* `study_sessions` (all also reference `users`). See `database/schema.sql`. Hibernate creates the tables automatically (`ddl-auto=update`); the SQL file is for reference/manual setup.
+```
+React
+  ↓
+Axios / REST API
+  ↓
+Spring Boot
+  ↓
+Controller → Service → Repository → Entity
+  ↓
+MySQL
+
+Study Session
+  ↓
+Quartz Scheduler
+  ↓
+Persistent Job / Trigger
+  ↓
+MySQL QRTZ_* tables
+```
+
+## Project Structure
+
+```
+Smart-Study-Planner/
+├── backend/
+│   ├── src/main/java/com/smartstudyplanner/
+│   │   ├── config/
+│   │   ├── controller/
+│   │   ├── dto/
+│   │   ├── entity/
+│   │   ├── exception/
+│   │   ├── repository/
+│   │   ├── scheduler/
+│   │   ├── security/
+│   │   └── service/
+│   ├── src/main/resources/
+│   │   ├── application.properties
+│   │   └── quartz/
+│   └── pom.xml
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── lib/
+│   │   └── pages/
+│   ├── package.json
+│   └── vite.config.js
+├── database/
+│   └── schema.sql
+├── QUARTZ-INTEGRATION.md
+└── README.md
+```
 
 ## Prerequisites
-JDK 17+, Maven 3.9+, Node 18+, MySQL 8+
+
+- JDK 17+
+- Maven 3.9+
+- Node.js 18+
+- MySQL 8+
 
 ## Setup
-1. MySQL: `mysql -u root -p < database/schema.sql` (optional; the database is also auto-created)
-2. Backend (Linux/macOS; use `set` on Windows cmd):
+
+### 1. Database
+
+Make sure MySQL is running and create the database:
+
+```sql
+CREATE DATABASE smart_study_planner;
 ```
+
+The schema is available in `database/schema.sql`.
+
+### 2. Backend
+
+Open a terminal:
+
+```powershell
 cd backend
-export DB_USERNAME=root DB_PASSWORD=your_password JWT_SECRET=$(openssl rand -hex 32)
-export SEED_DEMO=true   # optional demo data
+mvn clean package
 mvn spring-boot:run
 ```
-3. Frontend:
-```
+
+Configure the required environment variables before starting the backend. See `.env.example`.
+
+### 3. Frontend
+
+Open a second terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
-Open http://localhost:5173. Demo login (only if `SEED_DEMO=true`): `demo@studyplanner.local` / `Demo@12345`. Demo records are prefixed `[Demo]`.
 
-## Environment variables
-See `.env.example` (DB_URL, DB_USERNAME, DB_PASSWORD, JWT_SECRET, JWT_EXPIRATION_MS, CORS_ORIGIN, SEED_DEMO, VITE_API_URL).
+Open:
 
-## API (all except /api/auth/* need `Authorization: Bearer <token>`)
-| Method | Path | Notes |
+`http://localhost:5173`
+
+The backend runs on:
+
+`http://localhost:8080`
+
+## Quartz Scheduler
+
+Study sessions are stored as application data in MySQL. When a session is scheduled, the backend creates a Quartz JobDetail and Trigger for that session. Quartz persists scheduler metadata in MySQL using the `QRTZ_*` tables and executes the job at the configured start time.
+
+See [QUARTZ-INTEGRATION.md](QUARTZ-INTEGRATION.md) for the integration details and testing steps.
+
+## Environment Variables
+
+Use `.env.example` as a template. Never commit real database passwords, JWT secrets, or other credentials.
+
+## API Overview
+
+All endpoints except authentication endpoints require a JWT bearer token.
+
+| Method | Endpoint | Purpose |
 |---|---|---|
-| POST | /api/auth/register, /api/auth/login | returns token + user |
-| GET | /api/auth/me | current user |
-| GET/POST | /api/tasks | `?subjectId=` filter; sorted by smart score |
-| GET/PUT/DELETE | /api/tasks/{id} | |
-| GET/POST | /api/subjects | includes task counts and progress |
-| PUT/DELETE | /api/subjects/{id} | |
-| GET/POST | /api/study-sessions | |
-| PUT/DELETE | /api/study-sessions/{id} | |
-| GET | /api/progress, /api/dashboard | aggregated stats |
+| POST | `/api/auth/register` | Register a user |
+| POST | `/api/auth/login` | Authenticate a user |
+| GET | `/api/auth/me` | Get current user |
+| GET/POST | `/api/tasks` | List/create tasks |
+| GET/PUT/DELETE | `/api/tasks/{id}` | Manage a task |
+| GET/POST | `/api/subjects` | List/create subjects |
+| PUT/DELETE | `/api/subjects/{id}` | Manage a subject |
+| GET/POST | `/api/study-sessions` | List/create study sessions |
+| PUT/DELETE | `/api/study-sessions/{id}` | Manage a study session |
+| GET | `/api/dashboard` | Dashboard statistics |
+| GET | `/api/progress` | Progress statistics |
 
-Errors return `{ "message": "..." }` with 400/401/404/409/500.
+## Notes
 
-## Screenshots
-_Add screenshots here._
+The Smart Plan uses transparent rule-based prioritization; it is not an AI/ML model. Generated dependencies such as `node_modules/` and Maven `target/` are intentionally excluded from Git.
 
-## Future improvements
-Recurring sessions, password change, email reminders, automated tests, Docker Compose.
+## Future Improvements
+
+- Recurring study sessions
+- Email reminders
+- Automated tests
+- Docker Compose
+- Password reset and account management
